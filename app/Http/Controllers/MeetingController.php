@@ -15,31 +15,7 @@ class MeetingController extends Controller
     {
         $meetings = Meeting::withCount(['shares', 'loans', 'welfare'])
             ->orderBy('meeting_date', 'desc')
-            ->get()
-            ->map(function ($meeting) {
-                return [
-                    'id' => $meeting->id,
-                    'meeting_date' => $meeting->meeting_date->format('Y-m-d'),
-                    'venue' => $meeting->venue,
-                    'start_time' => $meeting->start_time ? $meeting->start_time->format('H:i') : null,
-                    'end_time' => $meeting->end_time ? $meeting->end_time->format('H:i') : null,
-                    'total_shares_collected' => (float) $meeting->total_shares_collected,
-                    'total_welfare_collected' => (float) $meeting->total_welfare_collected,
-                    'total_loan_paid' => (float) $meeting->total_loan_paid,
-                    'total_loans_issued' => (float) $meeting->total_loans_issued,
-                    'total_fines' => (float) $meeting->total_fines,
-                    'bank_balance' => (float) $meeting->bank_balance,
-                    'cash_in_hand' => (float) $meeting->cash_in_hand,
-                    'members_present' => $meeting->members_present,
-                    'agenda' => $meeting->agenda,
-                    'minutes' => $meeting->minutes,
-                    'status' => $meeting->status,
-                    'shares_count' => $meeting->shares_count,
-                    'loans_count' => $meeting->loans_count,
-                    'welfare_count' => $meeting->welfare_count,
-                    'total_cash' => (float) $meeting->total_cash,
-                ];
-            });
+            ->get();
 
         return Inertia::render('Meetings/Index', [
             'meetings' => $meetings
@@ -68,7 +44,7 @@ class MeetingController extends Controller
 
         $meeting = Meeting::create($validated);
 
-        return redirect()->route('meetings.show', $meeting)
+        return redirect()->route('meetings.index')
             ->with('success', 'Meeting created successfully');
     }
 
@@ -77,82 +53,14 @@ class MeetingController extends Controller
         $meeting->load(['shares.member', 'loans.member', 'welfare.member']);
         
         return Inertia::render('Meetings/Show', [
-            'meeting' => [
-                'id' => $meeting->id,
-                'meeting_date' => $meeting->meeting_date->format('Y-m-d'),
-                'venue' => $meeting->venue,
-                'start_time' => $meeting->start_time ? $meeting->start_time->format('H:i') : null,
-                'end_time' => $meeting->end_time ? $meeting->end_time->format('H:i') : null,
-                'total_shares_collected' => (float) $meeting->total_shares_collected,
-                'total_welfare_collected' => (float) $meeting->total_welfare_collected,
-                'total_loan_paid' => (float) $meeting->total_loan_paid,
-                'total_loans_issued' => (float) $meeting->total_loans_issued,
-                'total_fines' => (float) $meeting->total_fines,
-                'bank_balance' => (float) $meeting->bank_balance,
-                'cash_in_hand' => (float) $meeting->cash_in_hand,
-                'members_present' => $meeting->members_present,
-                'agenda' => $meeting->agenda,
-                'minutes' => $meeting->minutes,
-                'status' => $meeting->status,
-                'shares' => $meeting->shares->map(function ($share) {
-                    return [
-                        'id' => $share->id,
-                        'amount' => (float) $share->amount,
-                        'transaction_date' => $share->transaction_date->format('Y-m-d'),
-                        'notes' => $share->notes,
-                        'member' => $share->member ? [
-                            'id' => $share->member->id,
-                            'name' => $share->member->name,
-                        ] : null,
-                    ];
-                }),
-                'loans' => $meeting->loans->map(function ($loan) {
-                    return [
-                        'id' => $loan->id,
-                        'loan_amount' => (float) $loan->loan_amount,
-                        'interest_rate' => (float) $loan->interest_rate,
-                        'loan_date' => $loan->loan_date->format('Y-m-d'),
-                        'status' => $loan->status,
-                        'member' => $loan->member ? [
-                            'id' => $loan->member->id,
-                            'name' => $loan->member->name,
-                        ] : null,
-                    ];
-                }),
-                'welfare' => $meeting->welfare->map(function ($welfare) {
-                    return [
-                        'id' => $welfare->id,
-                        'amount' => (float) $welfare->amount,
-                        'type' => $welfare->type,
-                        'transaction_date' => $welfare->transaction_date->format('Y-m-d'),
-                        'notes' => $welfare->notes,
-                        'member' => $welfare->member ? [
-                            'id' => $welfare->member->id,
-                            'name' => $welfare->member->name,
-                        ] : null,
-                    ];
-                }),
-                'total_cash' => (float) $meeting->total_cash,
-            ]
+            'meeting' => $meeting
         ]);
     }
 
     public function edit(Meeting $meeting): Response
     {
         return Inertia::render('Meetings/Edit', [
-            'meeting' => [
-                'id' => $meeting->id,
-                'meeting_date' => $meeting->meeting_date->format('Y-m-d'),
-                'venue' => $meeting->venue,
-                'start_time' => $meeting->start_time ? $meeting->start_time->format('H:i') : '',
-                'end_time' => $meeting->end_time ? $meeting->end_time->format('H:i') : '',
-                'bank_balance' => (float) $meeting->bank_balance,
-                'cash_in_hand' => (float) $meeting->cash_in_hand,
-                'members_present' => $meeting->members_present,
-                'agenda' => $meeting->agenda,
-                'minutes' => $meeting->minutes,
-                'status' => $meeting->status,
-            ]
+            'meeting' => $meeting
         ]);
     }
 
@@ -191,52 +99,17 @@ class MeetingController extends Controller
         $meeting->load(['shares.member', 'loans.member', 'welfare.member']);
 
         return Inertia::render('Meetings/Summary', [
-            'meeting' => [
-                'id' => $meeting->id,
-                'meeting_date' => $meeting->meeting_date->format('Y-m-d'),
-                'venue' => $meeting->venue,
-                'status' => $meeting->status,
-            ],
-            'shares' => $meeting->shares->map(function ($share) {
-                return [
-                    'id' => $share->id,
-                    'amount' => (float) $share->amount,
-                    'member' => $share->member ? [
-                        'id' => $share->member->id,
-                        'name' => $share->member->name,
-                    ] : null,
-                ];
-            }),
-            'loans' => $meeting->loans->map(function ($loan) {
-                return [
-                    'id' => $loan->id,
-                    'loan_amount' => (float) $loan->loan_amount,
-                    'interest_rate' => (float) $loan->interest_rate,
-                    'status' => $loan->status,
-                    'member' => $loan->member ? [
-                        'id' => $loan->member->id,
-                        'name' => $loan->member->name,
-                    ] : null,
-                ];
-            }),
-            'welfare' => $meeting->welfare->map(function ($welfare) {
-                return [
-                    'id' => $welfare->id,
-                    'amount' => (float) $welfare->amount,
-                    'type' => $welfare->type,
-                    'member' => $welfare->member ? [
-                        'id' => $welfare->member->id,
-                        'name' => $welfare->member->name,
-                    ] : null,
-                ];
-            }),
+            'meeting' => $meeting,
+            'shares' => $meeting->shares,
+            'loans' => $meeting->loans,
+            'welfare' => $meeting->welfare,
             'totals' => [
-                'shares_collected' => (float) $meeting->total_shares_collected,
-                'welfare_collected' => (float) $meeting->total_welfare_collected,
-                'loans_issued' => (float) $meeting->total_loans_issued,
-                'loan_payments' => (float) $meeting->total_loan_paid,
-                'fines' => (float) $meeting->total_fines,
-                'total_cash' => (float) $meeting->total_cash,
+                'shares_collected' => $meeting->total_shares_collected,
+                'welfare_collected' => $meeting->total_welfare_collected,
+                'loans_issued' => $meeting->total_loans_issued,
+                'loan_payments' => $meeting->total_loan_paid,
+                'fines' => $meeting->total_fines,
+                'total_cash' => $meeting->total_cash,
             ]
         ]);
     }
@@ -255,7 +128,7 @@ class MeetingController extends Controller
             }
         ]);
 
-        // Get all active members with their transactions for this meeting
+        // Get all members with their transactions for this meeting
         $members = Member::where('status', 'active')
             ->with([
                 'shares' => function ($query) use ($meeting) {
@@ -279,28 +152,24 @@ class MeetingController extends Controller
                 return [
                     'id' => $member->id,
                     'name' => $member->name,
-                    'well_fare' => $member->welfare->first() ? (float) $member->welfare->first()->amount : 0,
-                    'share' => $member->shares->first() ? (float) $member->shares->first()->amount : 0,
-                    'cumulative_shares' => (float) $member->total_shares,
-                    'loan_paid' => (float) ($member->loans->sum('amount_paid') ?? 0),
-                    'loan_taken' => (float) ($member->loans->sum('loan_amount') ?? 0),
-                    'interest' => (float) ($member->loans->sum('interest_amount') ?? 0),
-                    'balance' => (float) ($member->loans->sum('balance') ?? 0),
+                    'well_fare' => $member->welfare->first()?->amount ?? 0,
+                    'share' => $member->shares->first()?->amount ?? 0,
+                    'cumulative_shares' => $member->total_shares,
+                    'loan_paid' => $member->loans->sum('amount_paid') ?? 0,
+                    'loan_taken' => $member->loans->sum('loan_amount') ?? 0,
+                    'interest' => $member->loans->sum('interest_amount') ?? 0,
+                    'balance' => $member->loans->sum('balance') ?? 0,
                 ];
             });
 
         return Inertia::render('Meetings/CollectionSheet', [
-            'meeting' => [
-                'id' => $meeting->id,
-                'meeting_date' => $meeting->meeting_date->format('Y-m-d'),
-                'venue' => $meeting->venue,
-            ],
+            'meeting' => $meeting,
             'members' => $members,
             'summary' => [
-                'total_shares' => (float) $meeting->total_shares_collected,
-                'total_welfare' => (float) $meeting->total_welfare_collected,
-                'total_loans' => (float) $meeting->total_loans_issued,
-                'total_fines' => (float) $meeting->total_fines,
+                'total_shares' => $meeting->total_shares_collected,
+                'total_welfare' => $meeting->total_welfare_collected,
+                'total_loans' => $meeting->total_loans_issued,
+                'total_fines' => $meeting->total_fines,
             ]
         ]);
     }

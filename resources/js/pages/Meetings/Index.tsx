@@ -14,35 +14,37 @@ import {
     Edit,
     Trash2,
     Search,
-    X,
     Calendar,
     Clock,
     Building,
     Users,
-    DollarSign,
-    FileText,
-    CheckCircle,
-    XCircle,
-    AlertCircle,
-    TrendingUp,
-    Download,
-    Eye,
-    Plus,
-    Save,
-    Loader2,
     FileSpreadsheet,
     PieChart,
     Wallet,
     CreditCard,
-    Receipt
+    Receipt,
+    CheckCircle,
+    XCircle,
+    Plus,
+    Save,
+    Loader2,
+    Download,
+    Eye,
+    AlertCircle
 } from 'lucide-react';
 import * as React from 'react';
 
-// Fallback drawer components if imports fail
+// Fallback drawer components
 const FallbackDrawer = ({ children, open, onOpenChange, ...props }: any) => (
     open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" {...props}>
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onOpenChange(false);
+            }}
+            {...props}
+        >
+            <div className="bg-white rounded-t-lg sm:rounded-lg w-full sm:max-w-2xl max-h-[90vh] overflow-hidden">
                 {children}
             </div>
         </div>
@@ -50,26 +52,25 @@ const FallbackDrawer = ({ children, open, onOpenChange, ...props }: any) => (
 );
 
 const FallbackDrawerContent = ({ children, className, ...props }: any) => (
-    <div className={className} {...props}>{children}</div>
+    <div className={`flex flex-col h-full ${className}`} {...props}>{children}</div>
 );
 
 const FallbackDrawerHeader = ({ children, className, ...props }: any) => (
-    <div className={`mb-4 ${className}`} {...props}>{children}</div>
+    <div className={`p-6 pb-4 ${className}`} {...props}>{children}</div>
 );
 
 const FallbackDrawerTitle = ({ children, className, ...props }: any) => (
-    <h2 className={`text-lg font-semibold ${className}`} {...props}>{children}</h2>
+    <h2 className={`text-xl font-semibold ${className}`} {...props}>{children}</h2>
 );
 
 const FallbackDrawerDescription = ({ children, className, ...props }: any) => (
-    <p className={`text-sm text-gray-500 ${className}`} {...props}>{children}</p>
+    <p className={`text-sm text-gray-500 mt-1 ${className}`} {...props}>{children}</p>
 );
 
 const FallbackDrawerFooter = ({ children, className, ...props }: any) => (
-    <div className={`mt-6 flex justify-end gap-3 ${className}`} {...props}>{children}</div>
+    <div className={`p-6 pt-4 border-t ${className}`} {...props}>{children}</div>
 );
 
-// Use fallback components
 const Drawer = FallbackDrawer;
 const DrawerContent = FallbackDrawerContent;
 const DrawerHeader = FallbackDrawerHeader;
@@ -125,9 +126,21 @@ interface FormData {
     status: 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
 }
 
+// Helper function to safely format currency
+const formatCurrency = (value: number | undefined | null): string => {
+    if (value === null || value === undefined || isNaN(value)) return '0.00';
+    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+// Helper function to safely format numbers
+const formatNumber = (value: number | undefined | null): string => {
+    if (value === null || value === undefined || isNaN(value)) return '0';
+    return value.toString();
+};
+
 export default function Index() {
     const { props } = usePage();
-    const { meetings, filters } = props as unknown as {
+    const { meetings = [], filters = {} } = props as unknown as {
         meetings: MeetingSummary[];
         filters: { search?: string; status?: string };
     };
@@ -156,18 +169,20 @@ export default function Index() {
         status: 'scheduled',
     });
 
-    const filteredMeetings = meetings.filter(meeting => {
-        if (activeTab !== 'all' && meeting.status !== activeTab) return false;
+    const filteredMeetings = React.useMemo(() => {
+        return meetings.filter(meeting => {
+            if (activeTab !== 'all' && meeting.status !== activeTab) return false;
 
-        if (!searchValue) return true;
+            if (!searchValue) return true;
 
-        const searchLower = searchValue.toLowerCase();
-        return (
-            meeting.venue.toLowerCase().includes(searchLower) ||
-            meeting.agenda?.toLowerCase().includes(searchLower) ||
-            meeting.meeting_date.includes(searchValue)
-        );
-    });
+            const searchLower = searchValue.toLowerCase();
+            return (
+                (meeting.venue || '').toLowerCase().includes(searchLower) ||
+                (meeting.agenda || '').toLowerCase().includes(searchLower) ||
+                meeting.meeting_date.includes(searchValue)
+            );
+        });
+    }, [meetings, activeTab, searchValue]);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -198,17 +213,23 @@ export default function Index() {
     }), [meetings]);
 
     const totalStats = React.useMemo(() => ({
-        totalShares: meetings.reduce((sum, m) => sum + m.total_shares_collected, 0),
-        totalWelfare: meetings.reduce((sum, m) => sum + m.total_welfare_collected, 0),
-        totalLoans: meetings.reduce((sum, m) => sum + m.total_loans_issued, 0),
-        totalFines: meetings.reduce((sum, m) => sum + m.total_fines, 0),
-        totalCash: meetings.reduce((sum, m) => sum + m.total_cash, 0),
-        totalTransactions: meetings.reduce((sum, m) => sum + m.shares_count + m.loans_count + m.welfare_count, 0),
+        totalShares: meetings.reduce((sum, m) => sum + (Number(m.total_shares_collected) || 0), 0),
+        totalWelfare: meetings.reduce((sum, m) => sum + (Number(m.total_welfare_collected) || 0), 0),
+        totalLoans: meetings.reduce((sum, m) => sum + (Number(m.total_loans_issued) || 0), 0),
+        totalFines: meetings.reduce((sum, m) => sum + (Number(m.total_fines) || 0), 0),
+        totalCash: meetings.reduce((sum, m) => sum + (Number(m.total_cash) || 0), 0),
+        totalTransactions: meetings.reduce((sum, m) =>
+            sum + (Number(m.shares_count) || 0) + (Number(m.loans_count) || 0) + (Number(m.welfare_count) || 0), 0
+        ),
     }), [meetings]);
 
     const formatTime = (time?: string) => {
         if (!time) return 'N/A';
-        return new Date(`2000-01-01T${time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        try {
+            return new Date(`2000-01-01T${time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch {
+            return time;
+        }
     };
 
     const handleDelete = () => {
@@ -229,16 +250,16 @@ export default function Index() {
 
             if (mode === 'edit' || mode === 'show') {
                 setFormData({
-                    meeting_date: meeting.meeting_date,
-                    venue: meeting.venue,
+                    meeting_date: meeting.meeting_date || '',
+                    venue: meeting.venue || '',
                     start_time: meeting.start_time || '',
                     end_time: meeting.end_time || '',
-                    bank_balance: meeting.bank_balance,
-                    cash_in_hand: meeting.cash_in_hand,
-                    members_present: meeting.members_present,
+                    bank_balance: meeting.bank_balance || '',
+                    cash_in_hand: meeting.cash_in_hand || '',
+                    members_present: meeting.members_present || '',
                     agenda: meeting.agenda || '',
                     minutes: meeting.minutes || '',
-                    status: meeting.status,
+                    status: meeting.status || 'scheduled',
                 });
             }
         } else {
@@ -275,8 +296,16 @@ export default function Index() {
     const handleSubmit = () => {
         setDrawer(prev => ({ ...prev, isLoading: true }));
 
+        // Convert empty strings to null for numeric fields
+        const submitData = {
+            ...formData,
+            bank_balance: formData.bank_balance === '' ? null : formData.bank_balance,
+            cash_in_hand: formData.cash_in_hand === '' ? null : formData.cash_in_hand,
+            members_present: formData.members_present === '' ? null : formData.members_present,
+        };
+
         if (drawer.mode === 'create') {
-            router.post('/meetings', formData, {
+            router.post('/meetings', submitData, {
                 onSuccess: () => {
                     closeDrawer();
                 },
@@ -285,7 +314,7 @@ export default function Index() {
                 },
             });
         } else if (drawer.mode === 'edit' && drawer.meeting) {
-            router.put(`/meetings/${drawer.meeting.id}`, formData, {
+            router.put(`/meetings/${drawer.meeting.id}`, submitData, {
                 onSuccess: () => {
                     closeDrawer();
                 },
@@ -318,14 +347,14 @@ export default function Index() {
             headers.join(','),
             ...filteredMeetings.map(meeting => [
                 meeting.meeting_date,
-                `"${meeting.venue}"`,
+                `"${meeting.venue || ''}"`,
                 meeting.status,
-                meeting.total_shares_collected,
-                meeting.total_welfare_collected,
-                meeting.total_loans_issued,
-                meeting.total_fines,
-                meeting.members_present,
-                meeting.total_cash
+                meeting.total_shares_collected || 0,
+                meeting.total_welfare_collected || 0,
+                meeting.total_loans_issued || 0,
+                meeting.total_fines || 0,
+                meeting.members_present || 0,
+                meeting.total_cash || 0
             ].join(','))
         ].join('\n');
 
@@ -368,15 +397,15 @@ export default function Index() {
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{statusCounts.total}</div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div className="text-2xl font-bold">{formatNumber(statusCounts.total)}</div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                                 <div className="flex items-center gap-1">
                                     <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                                    Scheduled: {statusCounts.scheduled}
+                                    {formatNumber(statusCounts.scheduled)} Scheduled
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                                    Completed: {statusCounts.completed}
+                                    {formatNumber(statusCounts.completed)} Done
                                 </div>
                             </div>
                         </CardContent>
@@ -388,32 +417,31 @@ export default function Index() {
                             <PieChart className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">KES {totalStats.totalShares.toLocaleString()}</div>
+                            <div className="text-2xl font-bold">KES {formatCurrency(totalStats.totalShares)}</div>
                             <p className="text-xs text-muted-foreground">Shares collected across all meetings</p>
                         </CardContent>
                     </Card>
 
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Welfare & Fines</CardTitle>
+                            <CardTitle className="text-sm font-medium">Welfare & Fines</CardTitle>
                             <Wallet className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">KES {(totalStats.totalWelfare + totalStats.totalFines).toLocaleString()}</div>
+                            <div className="text-2xl font-bold">KES {formatCurrency(totalStats.totalWelfare + totalStats.totalFines)}</div>
                             <p className="text-xs text-muted-foreground">
-                                Welfare: KES {totalStats.totalWelfare.toLocaleString()} |
-                                Fines: KES {totalStats.totalFines.toLocaleString()}
+                                Welfare: {formatCurrency(totalStats.totalWelfare)} | Fines: {formatCurrency(totalStats.totalFines)}
                             </p>
                         </CardContent>
                     </Card>
 
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Loans Issued</CardTitle>
+                            <CardTitle className="text-sm font-medium">Total Loans</CardTitle>
                             <CreditCard className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">KES {totalStats.totalLoans.toLocaleString()}</div>
+                            <div className="text-2xl font-bold">KES {formatCurrency(totalStats.totalLoans)}</div>
                             <p className="text-xs text-muted-foreground">Loans disbursed in meetings</p>
                         </CardContent>
                     </Card>
@@ -424,7 +452,7 @@ export default function Index() {
                     <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
                             <Search className="h-5 w-5" />
-                            Search & Filter Meetings
+                            Search & Filter
                         </CardTitle>
                         <CardDescription>Find meetings by venue, agenda, or date</CardDescription>
                     </CardHeader>
@@ -439,65 +467,37 @@ export default function Index() {
                                     className="pl-9"
                                 />
                             </div>
-                            <div className="flex gap-2">
-                                <Button
-                                    onClick={exportToCSV}
-                                    variant="outline"
-                                    className="gap-2"
-                                >
-                                    <Download className="h-4 w-4" />
-                                    Export CSV
-                                </Button>
-                            </div>
+                            <Button
+                                onClick={exportToCSV}
+                                variant="outline"
+                                className="gap-2"
+                                disabled={filteredMeetings.length === 0}
+                            >
+                                <Download className="h-4 w-4" />
+                                Export CSV
+                            </Button>
                         </div>
 
                         {/* Status Tabs */}
                         <div className="flex flex-wrap gap-2">
-                            <Button
-                                variant={activeTab === 'all' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setActiveTab('all')}
-                                className="gap-2"
-                            >
-                                <Calendar className="h-3.5 w-3.5" />
-                                All ({statusCounts.total})
-                            </Button>
-                            <Button
-                                variant={activeTab === 'scheduled' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setActiveTab('scheduled')}
-                                className="gap-2"
-                            >
-                                <Calendar className="h-3.5 w-3.5" />
-                                Scheduled ({statusCounts.scheduled})
-                            </Button>
-                            <Button
-                                variant={activeTab === 'ongoing' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setActiveTab('ongoing')}
-                                className="gap-2"
-                            >
-                                <Clock className="h-3.5 w-3.5" />
-                                Ongoing ({statusCounts.ongoing})
-                            </Button>
-                            <Button
-                                variant={activeTab === 'completed' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setActiveTab('completed')}
-                                className="gap-2"
-                            >
-                                <CheckCircle className="h-3.5 w-3.5" />
-                                Completed ({statusCounts.completed})
-                            </Button>
-                            <Button
-                                variant={activeTab === 'cancelled' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setActiveTab('cancelled')}
-                                className="gap-2"
-                            >
-                                <XCircle className="h-3.5 w-3.5" />
-                                Cancelled ({statusCounts.cancelled})
-                            </Button>
+                            {[
+                                { key: 'all', label: 'All', icon: Calendar, count: statusCounts.total },
+                                { key: 'scheduled', label: 'Scheduled', icon: Calendar, count: statusCounts.scheduled },
+                                { key: 'ongoing', label: 'Ongoing', icon: Clock, count: statusCounts.ongoing },
+                                { key: 'completed', label: 'Completed', icon: CheckCircle, count: statusCounts.completed },
+                                { key: 'cancelled', label: 'Cancelled', icon: XCircle, count: statusCounts.cancelled },
+                            ].map(({ key, label, icon: Icon, count }) => (
+                                <Button
+                                    key={key}
+                                    variant={activeTab === key ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setActiveTab(key as any)}
+                                    className="gap-2"
+                                >
+                                    <Icon className="h-3.5 w-3.5" />
+                                    {label} ({count})
+                                </Button>
+                            ))}
                         </div>
                     </CardContent>
                 </Card>
@@ -508,7 +508,9 @@ export default function Index() {
                         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                             <Calendar className="h-16 w-16 text-muted-foreground mb-4" />
                             <h3 className="text-lg font-semibold mb-2">No meetings found</h3>
-                            <p className="text-muted-foreground mb-4">Try adjusting your search filters</p>
+                            <p className="text-muted-foreground mb-4">
+                                {searchValue ? 'Try adjusting your search filters' : 'Get started by scheduling your first meeting'}
+                            </p>
                             <Button onClick={() => openDrawer('create')} className="gap-2">
                                 <Plus className="h-4 w-4" />
                                 Schedule New Meeting
@@ -525,7 +527,7 @@ export default function Index() {
                                             <CardTitle className="text-base flex items-center gap-2">
                                                 <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                                 <span className="truncate">
-                                                    {new Date(meeting.meeting_date).toLocaleDateString('en-US', {
+                                                    {new Date(meeting.meeting_date + 'T00:00:00').toLocaleDateString('en-US', {
                                                         weekday: 'short',
                                                         year: 'numeric',
                                                         month: 'short',
@@ -535,7 +537,7 @@ export default function Index() {
                                             </CardTitle>
                                             <CardDescription className="flex items-center gap-1.5">
                                                 <Building className="h-3.5 w-3.5 flex-shrink-0" />
-                                                <span className="truncate">{meeting.venue}</span>
+                                                <span className="truncate">{meeting.venue || 'No venue'}</span>
                                             </CardDescription>
                                         </div>
                                         <Badge variant="outline" className={`${getStatusColor(meeting.status)} border flex-shrink-0 gap-1`}>
@@ -547,15 +549,17 @@ export default function Index() {
 
                                 <CardContent className="space-y-3">
                                     {/* Time Info */}
-                                    <div className="flex items-center justify-between text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <Clock className="h-4 w-4 text-muted-foreground" />
-                                            <span>Time:</span>
+                                    {(meeting.start_time || meeting.end_time) && (
+                                        <div className="flex items-center justify-between text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                                <span>Time:</span>
+                                            </div>
+                                            <span>
+                                                {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
+                                            </span>
                                         </div>
-                                        <span>
-                                            {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
-                                        </span>
-                                    </div>
+                                    )}
 
                                     {/* Attendance */}
                                     <div className="flex items-center justify-between text-sm">
@@ -563,7 +567,7 @@ export default function Index() {
                                             <Users className="h-4 w-4 text-muted-foreground" />
                                             <span>Attendance:</span>
                                         </div>
-                                        <span>{meeting.members_present} members</span>
+                                        <span>{formatNumber(meeting.members_present)} members</span>
                                     </div>
 
                                     <Separator />
@@ -575,28 +579,28 @@ export default function Index() {
                                                 <PieChart className="h-3.5 w-3.5" />
                                                 Shares:
                                             </span>
-                                            <span className="font-semibold">KES {meeting.total_shares_collected.toLocaleString()}</span>
+                                            <span className="font-semibold">KES {formatCurrency(meeting.total_shares_collected)}</span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
                                             <span className="text-muted-foreground flex items-center gap-1.5">
                                                 <Wallet className="h-3.5 w-3.5" />
                                                 Welfare:
                                             </span>
-                                            <span className="font-semibold">KES {meeting.total_welfare_collected.toLocaleString()}</span>
+                                            <span className="font-semibold">KES {formatCurrency(meeting.total_welfare_collected)}</span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
                                             <span className="text-muted-foreground flex items-center gap-1.5">
                                                 <CreditCard className="h-3.5 w-3.5" />
                                                 Loans:
                                             </span>
-                                            <span className="font-semibold">KES {meeting.total_loans_issued.toLocaleString()}</span>
+                                            <span className="font-semibold">KES {formatCurrency(meeting.total_loans_issued)}</span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
                                             <span className="text-muted-foreground flex items-center gap-1.5">
                                                 <Receipt className="h-3.5 w-3.5" />
                                                 Total Cash:
                                             </span>
-                                            <span className="font-semibold">KES {meeting.total_cash.toLocaleString()}</span>
+                                            <span className="font-semibold text-green-600">KES {formatCurrency(meeting.total_cash)}</span>
                                         </div>
                                     </div>
 
@@ -605,15 +609,15 @@ export default function Index() {
                                     {/* Transactions Count */}
                                     <div className="grid grid-cols-3 gap-2 text-center text-sm">
                                         <div className="p-2 bg-blue-50 rounded">
-                                            <div className="font-semibold">{meeting.shares_count}</div>
+                                            <div className="font-semibold">{formatNumber(meeting.shares_count)}</div>
                                             <div className="text-xs text-muted-foreground">Shares</div>
                                         </div>
                                         <div className="p-2 bg-green-50 rounded">
-                                            <div className="font-semibold">{meeting.loans_count}</div>
+                                            <div className="font-semibold">{formatNumber(meeting.loans_count)}</div>
                                             <div className="text-xs text-muted-foreground">Loans</div>
                                         </div>
                                         <div className="p-2 bg-purple-50 rounded">
-                                            <div className="font-semibold">{meeting.welfare_count}</div>
+                                            <div className="font-semibold">{formatNumber(meeting.welfare_count)}</div>
                                             <div className="text-xs text-muted-foreground">Welfare</div>
                                         </div>
                                     </div>
@@ -621,11 +625,11 @@ export default function Index() {
                                     <Separator />
 
                                     {/* Action Buttons */}
-                                    <div className="flex gap-2 pt-2">
+                                    <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             size="sm"
                                             onClick={() => openDrawer('show', meeting)}
-                                            className="flex-1 gap-2"
+                                            className="gap-2"
                                             variant="outline"
                                         >
                                             <Eye className="h-4 w-4" />
@@ -634,7 +638,7 @@ export default function Index() {
                                         <Button
                                             size="sm"
                                             onClick={() => router.get(`/meetings/${meeting.id}/collection-sheet`)}
-                                            className="flex-1 gap-2"
+                                            className="gap-2"
                                         >
                                             <FileSpreadsheet className="h-4 w-4" />
                                             Collection
@@ -642,23 +646,20 @@ export default function Index() {
                                         <Button
                                             size="sm"
                                             variant="outline"
-                                            onClick={() => router.get(`/meetings/${meeting.id}/summary`)}
-                                        >
-                                            <PieChart className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
                                             onClick={() => openDrawer('edit', meeting)}
+                                            className="gap-2"
                                         >
                                             <Edit className="h-4 w-4" />
+                                            Edit
                                         </Button>
                                         <Button
                                             size="sm"
-                                            variant="outline"
+                                            variant="destructive"
                                             onClick={() => setDeletingMeeting(meeting)}
+                                            className="gap-2"
                                         >
                                             <Trash2 className="h-4 w-4" />
+                                            Delete
                                         </Button>
                                     </div>
                                 </CardContent>
@@ -667,16 +668,10 @@ export default function Index() {
                     </div>
                 )}
 
-                {/* Pagination or Count Display */}
+                {/* Results Count */}
                 {filteredMeetings.length > 0 && (
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>Showing {filteredMeetings.length} of {meetings.length} meetings</span>
-                        <div className="flex items-center gap-4">
-                            <Button variant="outline" size="sm" className="gap-2">
-                                <Download className="h-3.5 w-3.5" />
-                                Export All Data
-                            </Button>
-                        </div>
+                    <div className="flex items-center justify-center text-sm text-muted-foreground">
+                        <span>Showing {formatNumber(filteredMeetings.length)} of {formatNumber(meetings.length)} meetings</span>
                     </div>
                 )}
             </div>
@@ -690,33 +685,33 @@ export default function Index() {
                             Delete Meeting
                         </DialogTitle>
                         <DialogDescription>
-                            This action will permanently delete the meeting record.
+                            This action will permanently delete the meeting and all associated transactions.
                         </DialogDescription>
                     </DialogHeader>
                     {deletingMeeting && (
                         <div className="py-4 space-y-4">
                             <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
-                                <Calendar className="h-10 w-10 text-red-600" />
-                                <div>
-                                    <p className="font-semibold">
-                                        {new Date(deletingMeeting.meeting_date).toLocaleDateString('en-US', {
+                                <Calendar className="h-10 w-10 text-red-600 flex-shrink-0" />
+                                <div className="min-w-0">
+                                    <p className="font-semibold truncate">
+                                        {new Date(deletingMeeting.meeting_date + 'T00:00:00').toLocaleDateString('en-US', {
                                             weekday: 'long',
                                             year: 'numeric',
                                             month: 'long',
                                             day: 'numeric'
                                         })}
                                     </p>
-                                    <p className="text-sm text-muted-foreground">{deletingMeeting.venue}</p>
+                                    <p className="text-sm text-muted-foreground truncate">{deletingMeeting.venue || 'No venue'}</p>
                                 </div>
                             </div>
                             <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
                                 <p className="text-sm text-amber-800 font-medium flex items-center gap-2">
-                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
                                     Warning
                                 </p>
                                 <p className="text-sm text-amber-700 mt-1">
-                                    This meeting has {deletingMeeting.shares_count} shares, {deletingMeeting.loans_count} loans,
-                                    and {deletingMeeting.welfare_count} welfare records. Deleting will remove all associated transactions.
+                                    This meeting has {formatNumber(deletingMeeting.shares_count)} shares, {formatNumber(deletingMeeting.loans_count)} loans,
+                                    and {formatNumber(deletingMeeting.welfare_count)} welfare records. All will be permanently deleted.
                                 </p>
                             </div>
                         </div>
@@ -733,17 +728,14 @@ export default function Index() {
                 </DialogContent>
             </Dialog>
 
-            {/* Meeting Drawer for Create/Edit/Show */}
+            {/* Meeting Drawer */}
             <Drawer open={drawer.isOpen} onOpenChange={(open) => !open && closeDrawer()}>
-                <DrawerContent className="max-w-2xl mx-auto">
+                <DrawerContent>
                     <DrawerHeader>
                         <DrawerTitle className="flex items-center gap-2">
-                            {drawer.mode === 'create' && <Plus className="h-5 w-5" />}
-                            {drawer.mode === 'edit' && <Edit className="h-5 w-5" />}
-                            {drawer.mode === 'show' && <Eye className="h-5 w-5" />}
-                            {drawer.mode === 'create' && 'Schedule New Meeting'}
-                            {drawer.mode === 'edit' && `Edit Meeting - ${drawer.meeting?.venue}`}
-                            {drawer.mode === 'show' && `Meeting Details - ${drawer.meeting?.venue}`}
+                            {drawer.mode === 'create' && <><Plus className="h-5 w-5" />Schedule New Meeting</>}
+                            {drawer.mode === 'edit' && <><Edit className="h-5 w-5" />Edit Meeting</>}
+                            {drawer.mode === 'show' && <><Eye className="h-5 w-5" />Meeting Details</>}
                         </DrawerTitle>
                         <DrawerDescription>
                             {drawer.mode === 'create' && 'Schedule a new group meeting'}
@@ -752,264 +744,192 @@ export default function Index() {
                         </DrawerDescription>
                     </DrawerHeader>
 
-                    <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
-                        {/* Meeting Information Card */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg flex items-center gap-2">
-                                    <Calendar className="h-5 w-5" />
-                                    Meeting Information
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* Meeting Date */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="meeting_date">Meeting Date *</Label>
-                                        <Input
-                                            id="meeting_date"
-                                            name="meeting_date"
-                                            type="date"
-                                            value={formData.meeting_date}
-                                            onChange={handleInputChange}
-                                            disabled={drawer.mode === 'show'}
-                                            required
-                                        />
-                                    </div>
+                    <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(90vh-200px)]">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="meeting_date">Meeting Date *</Label>
+                                <Input
+                                    id="meeting_date"
+                                    name="meeting_date"
+                                    type="date"
+                                    value={formData.meeting_date}
+                                    onChange={handleInputChange}
+                                    disabled={drawer.mode === 'show'}
+                                    required
+                                />
+                            </div>
 
-                                    {/* Venue */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="venue">Venue</Label>
-                                        <Input
-                                            id="venue"
-                                            name="venue"
-                                            value={formData.venue}
-                                            onChange={handleInputChange}
-                                            placeholder="Enter venue"
-                                            disabled={drawer.mode === 'show'}
-                                        />
-                                    </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="venue">Venue</Label>
+                                <Input
+                                    id="venue"
+                                    name="venue"
+                                    value={formData.venue}
+                                    onChange={handleInputChange}
+                                    placeholder="Enter venue"
+                                    disabled={drawer.mode === 'show'}
+                                />
+                            </div>
 
-                                    {/* Start Time */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="start_time">Start Time</Label>
-                                        <Input
-                                            id="start_time"
-                                            name="start_time"
-                                            type="time"
-                                            value={formData.start_time}
-                                            onChange={handleInputChange}
-                                            disabled={drawer.mode === 'show'}
-                                        />
-                                    </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="start_time">Start Time</Label>
+                                <Input
+                                    id="start_time"
+                                    name="start_time"
+                                    type="time"
+                                    value={formData.start_time}
+                                    onChange={handleInputChange}
+                                    disabled={drawer.mode === 'show'}
+                                />
+                            </div>
 
-                                    {/* End Time */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="end_time">End Time</Label>
-                                        <Input
-                                            id="end_time"
-                                            name="end_time"
-                                            type="time"
-                                            value={formData.end_time}
-                                            onChange={handleInputChange}
-                                            disabled={drawer.mode === 'show'}
-                                        />
-                                    </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="end_time">End Time</Label>
+                                <Input
+                                    id="end_time"
+                                    name="end_time"
+                                    type="time"
+                                    value={formData.end_time}
+                                    onChange={handleInputChange}
+                                    disabled={drawer.mode === 'show'}
+                                />
+                            </div>
 
-                                    {/* Bank Balance */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="bank_balance">Bank Balance (KES)</Label>
-                                        <Input
-                                            id="bank_balance"
-                                            name="bank_balance"
-                                            type="number"
-                                            value={formData.bank_balance}
-                                            onChange={handleInputChange}
-                                            placeholder="0.00"
-                                            disabled={drawer.mode === 'show'}
-                                        />
-                                    </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="bank_balance">Bank Balance (KES)</Label>
+                                <Input
+                                    id="bank_balance"
+                                    name="bank_balance"
+                                    type="number"
+                                    step="0.01"
+                                    value={formData.bank_balance}
+                                    onChange={handleInputChange}
+                                    placeholder="0.00"
+                                    disabled={drawer.mode === 'show'}
+                                />
+                            </div>
 
-                                    {/* Cash in Hand */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="cash_in_hand">Cash in Hand (KES)</Label>
-                                        <Input
-                                            id="cash_in_hand"
-                                            name="cash_in_hand"
-                                            type="number"
-                                            value={formData.cash_in_hand}
-                                            onChange={handleInputChange}
-                                            placeholder="0.00"
-                                            disabled={drawer.mode === 'show'}
-                                        />
-                                    </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="cash_in_hand">Cash in Hand (KES)</Label>
+                                <Input
+                                    id="cash_in_hand"
+                                    name="cash_in_hand"
+                                    type="number"
+                                    step="0.01"
+                                    value={formData.cash_in_hand}
+                                    onChange={handleInputChange}
+                                    placeholder="0.00"
+                                    disabled={drawer.mode === 'show'}
+                                />
+                            </div>
 
-                                    {/* Members Present */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="members_present">Members Present</Label>
-                                        <Input
-                                            id="members_present"
-                                            name="members_present"
-                                            type="number"
-                                            value={formData.members_present}
-                                            onChange={handleInputChange}
-                                            placeholder="0"
-                                            disabled={drawer.mode === 'show'}
-                                        />
-                                    </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="members_present">Members Present</Label>
+                                <Input
+                                    id="members_present"
+                                    name="members_present"
+                                    type="number"
+                                    value={formData.members_present}
+                                    onChange={handleInputChange}
+                                    placeholder="0"
+                                    disabled={drawer.mode === 'show'}
+                                />
+                            </div>
 
-                                    {/* Status */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="status">Status</Label>
-                                        <select
-                                            id="status"
-                                            name="status"
-                                            value={formData.status}
-                                            onChange={handleInputChange}
-                                            disabled={drawer.mode === 'show'}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                        >
-                                            <option value="scheduled">Scheduled</option>
-                                            <option value="ongoing">Ongoing</option>
-                                            <option value="completed">Completed</option>
-                                            <option value="cancelled">Cancelled</option>
-                                        </select>
-                                    </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="status">Status</Label>
+                                <select
+                                    id="status"
+                                    name="status"
+                                    value={formData.status}
+                                    onChange={handleInputChange}
+                                    disabled={drawer.mode === 'show'}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                >
+                                    <option value="scheduled">Scheduled</option>
+                                    <option value="ongoing">Ongoing</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="cancelled">Cancelled</option>
+                                </select>
+                            </div>
 
-                                    {/* Agenda */}
-                                    <div className="space-y-2 md:col-span-2">
-                                        <Label htmlFor="agenda">Agenda</Label>
-                                        <textarea
-                                            id="agenda"
-                                            name="agenda"
-                                            value={formData.agenda}
-                                            onChange={handleInputChange}
-                                            placeholder="Meeting agenda..."
-                                            disabled={drawer.mode === 'show'}
-                                            rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                        />
-                                    </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <Label htmlFor="agenda">Agenda</Label>
+                                <textarea
+                                    id="agenda"
+                                    name="agenda"
+                                    value={formData.agenda}
+                                    onChange={handleInputChange}
+                                    placeholder="Meeting agenda..."
+                                    disabled={drawer.mode === 'show'}
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed resize-none"
+                                />
+                            </div>
 
-                                    {/* Minutes */}
-                                    <div className="space-y-2 md:col-span-2">
-                                        <Label htmlFor="minutes">Minutes</Label>
-                                        <textarea
-                                            id="minutes"
-                                            name="minutes"
-                                            value={formData.minutes}
-                                            onChange={handleInputChange}
-                                            placeholder="Meeting minutes..."
-                                            disabled={drawer.mode === 'show'}
-                                            rows={4}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                        />
+                            <div className="space-y-2 md:col-span-2">
+                                <Label htmlFor="minutes">Minutes</Label>
+                                <textarea
+                                    id="minutes"
+                                    name="minutes"
+                                    value={formData.minutes}
+                                    onChange={handleInputChange}
+                                    placeholder="Meeting minutes..."
+                                    disabled={drawer.mode === 'show'}
+                                    rows={4}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed resize-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Show Mode - Display Meeting Summary */}
+                        {drawer.mode === 'show' && drawer.meeting && (
+                            <>
+                                <Separator className="my-6" />
+                                <div className="space-y-4">
+                                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                                        <PieChart className="h-5 w-5" />
+                                        Meeting Summary
+                                    </h3>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="text-center p-3 bg-blue-50 rounded-lg">
+                                            <div className="text-lg font-bold text-blue-600">
+                                                KES {formatCurrency(drawer.meeting.total_shares_collected)}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Shares</p>
+                                        </div>
+                                        <div className="text-center p-3 bg-green-50 rounded-lg">
+                                            <div className="text-lg font-bold text-green-600">
+                                                KES {formatCurrency(drawer.meeting.total_welfare_collected)}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Welfare</p>
+                                        </div>
+                                        <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                                            <div className="text-lg font-bold text-yellow-600">
+                                                KES {formatCurrency(drawer.meeting.total_loans_issued)}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Loans</p>
+                                        </div>
+                                        <div className="text-center p-3 bg-purple-50 rounded-lg">
+                                            <div className="text-lg font-bold text-purple-600">
+                                                KES {formatCurrency(drawer.meeting.total_cash)}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Total Cash</p>
+                                        </div>
                                     </div>
                                 </div>
-
-                                {/* Show Mode - Display Meeting Summary */}
-                                {drawer.mode === 'show' && drawer.meeting && (
-                                    <>
-                                        <Separator />
-                                        <div className="space-y-4">
-                                            <h3 className="font-semibold text-lg flex items-center gap-2">
-                                                <PieChart className="h-5 w-5" />
-                                                Meeting Summary
-                                            </h3>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                <div className="text-center p-3 bg-blue-50 rounded-lg">
-                                                    <div className="text-xl font-bold text-blue-600">
-                                                        KES {drawer.meeting.total_shares_collected.toLocaleString()}
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground">Shares</p>
-                                                </div>
-                                                <div className="text-center p-3 bg-green-50 rounded-lg">
-                                                    <div className="text-xl font-bold text-green-600">
-                                                        KES {drawer.meeting.total_welfare_collected.toLocaleString()}
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground">Welfare</p>
-                                                </div>
-                                                <div className="text-center p-3 bg-yellow-50 rounded-lg">
-                                                    <div className="text-xl font-bold text-yellow-600">
-                                                        KES {drawer.meeting.total_loans_issued.toLocaleString()}
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground">Loans</p>
-                                                </div>
-                                                <div className="text-center p-3 bg-purple-50 rounded-lg">
-                                                    <div className="text-xl font-bold text-purple-600">
-                                                        KES {drawer.meeting.total_cash.toLocaleString()}
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground">Total Cash</p>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-4 text-center">
-                                                <div className="p-2 bg-blue-50 rounded">
-                                                    <div className="font-semibold">{drawer.meeting.shares_count}</div>
-                                                    <div className="text-xs text-muted-foreground">Share Transactions</div>
-                                                </div>
-                                                <div className="p-2 bg-green-50 rounded">
-                                                    <div className="font-semibold">{drawer.meeting.loans_count}</div>
-                                                    <div className="text-xs text-muted-foreground">Loan Transactions</div>
-                                                </div>
-                                                <div className="p-2 bg-purple-50 rounded">
-                                                    <div className="font-semibold">{drawer.meeting.welfare_count}</div>
-                                                    <div className="text-xs text-muted-foreground">Welfare Transactions</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Show Mode - Additional Actions */}
-                        {drawer.mode === 'show' && drawer.meeting && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-lg flex items-center gap-2">
-                                        <FileText className="h-5 w-5" />
-                                        Quick Actions
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <Button
-                                            onClick={() => router.get(`/meetings/${drawer.meeting?.id}/collection-sheet`)}
-                                            className="gap-2"
-                                        >
-                                            <FileSpreadsheet className="h-4 w-4" />
-                                            Collection Sheet
-                                        </Button>
-                                        <Button
-                                            onClick={() => router.get(`/meetings/${drawer.meeting?.id}/summary`)}
-                                            variant="outline"
-                                            className="gap-2"
-                                        >
-                                            <PieChart className="h-4 w-4" />
-                                            Meeting Summary
-                                        </Button>
-                                        <Button
-                                            onClick={() => openDrawer('edit', drawer.meeting)}
-                                            variant="outline"
-                                            className="gap-2"
-                                        >
-                                            <Edit className="h-4 w-4" />
-                                            Edit Meeting
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            </>
                         )}
                     </div>
 
-                    <DrawerFooter className="border-t">
+                    <DrawerFooter>
                         <div className="flex justify-end gap-3">
                             <Button
                                 variant="outline"
                                 onClick={closeDrawer}
                                 disabled={drawer.isLoading}
                             >
-                                Cancel
+                                {drawer.mode === 'show' ? 'Close' : 'Cancel'}
                             </Button>
 
                             {drawer.mode !== 'show' && (
@@ -1021,24 +941,14 @@ export default function Index() {
                                     {drawer.isLoading ? (
                                         <>
                                             <Loader2 className="h-4 w-4 animate-spin" />
-                                            {drawer.mode === 'create' ? 'Scheduling...' : 'Updating...'}
+                                            {drawer.mode === 'create' ? 'Creating...' : 'Updating...'}
                                         </>
                                     ) : (
                                         <>
                                             <Save className="h-4 w-4" />
-                                            {drawer.mode === 'create' ? 'Schedule Meeting' : 'Update Meeting'}
+                                            {drawer.mode === 'create' ? 'Create Meeting' : 'Update Meeting'}
                                         </>
                                     )}
-                                </Button>
-                            )}
-
-                            {drawer.mode === 'show' && (
-                                <Button
-                                    onClick={() => openDrawer('edit', drawer.meeting)}
-                                    className="gap-2"
-                                >
-                                    <Edit className="h-4 w-4" />
-                                    Edit Meeting
                                 </Button>
                             )}
                         </div>
