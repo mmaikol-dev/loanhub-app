@@ -42,26 +42,36 @@ class MemberController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('Members/Create');
+       //eturn Inertia::render('Members/Create');
     }
 
     public function store(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|unique:members,email',
-            'id_number' => 'nullable|string|unique:members,id_number',
-            'address' => 'nullable|string',
-            'join_date' => 'required|date',
-            'status' => 'nullable|in:active,inactive,suspended',
-        ]);
+{
+    $data = $request->all();
 
-        Member::create($validated);
-
-        return redirect()->route('members.index')
-            ->with('success', 'Member created successfully');
+    // Convert empty strings to null
+    foreach (['email', 'id_number', 'phone', 'address'] as $field) {
+        if (empty($data[$field])) {
+            $data[$field] = null;
+        }
     }
+
+    $validated = validator($data, [
+        'name' => 'required|string|max:255',
+        'phone' => 'nullable|string|max:20',
+        'email' => 'nullable|email|unique:members,email',
+        'id_number' => 'nullable|string|unique:members,id_number',
+        'address' => 'nullable|string',
+        'join_date' => 'required|date',
+        'status' => 'nullable|in:active,inactive,suspended',
+    ])->validate();
+
+    Member::create($validated);
+
+    return redirect()->route('members.index')
+        ->with('success', 'Member created successfully');
+}
+
 
     public function show(Member $member): Response
     {
