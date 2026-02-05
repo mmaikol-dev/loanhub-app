@@ -240,13 +240,14 @@ export default function Index() {
     const handlePayment = () => {
         if (!recordingPayment) return;
 
-        router.post(`/loans/${recordingPayment.id}/payment`, {
+        router.post(`/loans/${recordingPayment.id}/payments`, {
             amount: parseFloat(paymentAmount),
             payment_date: paymentDate,
         }, {
             onSuccess: () => {
                 setRecordingPayment(null);
                 setPaymentAmount('');
+                setPaymentDate(new Date().toISOString().split('T')[0]);
             },
         });
     };

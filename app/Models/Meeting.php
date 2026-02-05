@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 class Meeting extends Model
 {
@@ -72,6 +73,15 @@ class Meeting extends Model
         $this->total_loans_issued = Loan::where('meeting_id', $this->id)
             ->whereIn('status', ['approved', 'active'])
             ->sum('loan_amount') ?? 0;
+
+        // Prefer payment ledger if available, otherwise fallback to loan aggregate.
+        if (Schema::hasTable('loan_payments')) {
+            $this->total_loan_paid = LoanPayment::where('meeting_id', $this->id)
+                ->sum('amount') ?? 0;
+        } else {
+            $this->total_loan_paid = Loan::where('meeting_id', $this->id)
+                ->sum('amount_paid') ?? 0;
+        }
         
         $this->save();
     }

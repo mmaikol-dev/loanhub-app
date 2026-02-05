@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Loan;
+use App\Models\LoanPayment;
 use App\Models\Member;
 use App\Models\Meeting;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 
 class LoanController extends Controller
 {
@@ -220,18 +222,35 @@ class LoanController extends Controller
     public function recordPayment(Request $request, Loan $loan): RedirectResponse
     {
         $validated = $request->validate([
-            'amount' => 'required|numeric|min:0',
+            'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'required|date',
             'notes' => 'nullable|string',
         ]);
 
-        if ($validated['amount'] > $loan->balance) {
+        $amount = (float) $validated['amount'];
+
+        if ($amount > (float) $loan->balance) {
             return back()->withErrors([
                 'amount' => 'Payment amount exceeds loan balance of ' . number_format($loan->balance, 2)
             ]);
         }
 
-        $loan->recordPayment($validated['amount']);
+        DB::transaction(function () use ($loan, $validated, $amount) {
+            $loan->recordPayment($amount);
+
+            LoanPayment::create([
+                'loan_id' => $loan->id,
+                'meeting_id' => $loan->meeting_id,
+                'member_id' => $loan->member_id,
+                'amount' => $amount,
+                'payment_date' => $validated['payment_date'],
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            if ($loan->meeting_id) {
+                $loan->meeting?->calculateTotals();
+            }
+        });
 
         return redirect()->route('loans.show', $loan)
             ->with('success', 'Payment recorded successfully');
