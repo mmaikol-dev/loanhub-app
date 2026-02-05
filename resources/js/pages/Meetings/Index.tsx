@@ -30,7 +30,10 @@ import {
     Loader2,
     Download,
     Eye,
-    AlertCircle
+    AlertCircle,
+    X,
+    Check,
+    Printer
 } from 'lucide-react';
 import * as React from 'react';
 
@@ -83,6 +86,50 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Meetings', href: '/meetings' },
 ];
 
+interface Member {
+    id: number;
+    name: string;
+}
+
+interface Share {
+    id: number;
+    member_id: number;
+    amount: number;
+    cumulative_amount: number;
+}
+
+interface Welfare {
+    id: number;
+    member_id: number;
+    amount: number;
+    cumulative_amount: number;
+    type: 'contribution' | 'fine';
+}
+
+interface Loan {
+    id: number;
+    member_id: number;
+    loan_amount: number;
+    interest_amount: number;
+    total_amount: number;
+    amount_paid: number;
+    balance: number;
+    status: string;
+}
+
+interface CollectionData {
+    member: Member;
+    welfare: number;
+    share: number;
+    loan_paid: number;
+    loan_taken: number;
+    interest: number;
+    rolled_over: number;
+    fines: number;
+    cumulative_shares: number;
+    new_loan: number;
+}
+
 interface MeetingSummary {
     id: number;
     meeting_date: string;
@@ -126,6 +173,14 @@ interface FormData {
     status: 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
 }
 
+interface CollectionSheetState {
+    isOpen: boolean;
+    meetingId: number | null;
+    data: CollectionData[];
+    isLoading: boolean;
+    meeting: MeetingSummary | null;
+}
+
 // Helper function to safely format currency
 const formatCurrency = (value: number | undefined | null): string => {
     if (value === null || value === undefined || isNaN(value)) return '0.00';
@@ -154,6 +209,14 @@ export default function Index() {
         mode: null,
         meeting: null,
         isLoading: false,
+    });
+
+    const [collectionSheet, setCollectionSheet] = React.useState<CollectionSheetState>({
+        isOpen: false,
+        meetingId: null,
+        data: [],
+        isLoading: false,
+        meeting: null,
     });
 
     const [formData, setFormData] = React.useState<FormData>({
@@ -341,6 +404,58 @@ export default function Index() {
         }
     };
 
+    const openCollectionSheet = async (meeting: MeetingSummary) => {
+        setCollectionSheet({
+            isOpen: true,
+            meetingId: meeting.id,
+            data: [],
+            isLoading: true,
+            meeting,
+        });
+
+        try {
+            // Fetch collection data via Inertia
+            router.get(`/meetings/${meeting.id}/collectionsheet`, {}, {
+                preserveState: true,
+                preserveScroll: true,
+                only: ['collectionData'],
+                onSuccess: (page: any) => {
+                    setCollectionSheet(prev => ({
+                        ...prev,
+                        data: page.props.collectionData || [],
+                        isLoading: false,
+                    }));
+                },
+                onError: () => {
+                    setCollectionSheet(prev => ({
+                        ...prev,
+                        isLoading: false,
+                    }));
+                }
+            });
+        } catch (error) {
+            console.error('Error fetching collection data:', error);
+            setCollectionSheet(prev => ({
+                ...prev,
+                isLoading: false,
+            }));
+        }
+    };
+
+    const closeCollectionSheet = () => {
+        setCollectionSheet({
+            isOpen: false,
+            meetingId: null,
+            data: [],
+            isLoading: false,
+            meeting: null,
+        });
+    };
+
+    const printCollectionSheet = () => {
+        window.print();
+    };
+
     const exportToCSV = () => {
         const headers = ['Date', 'Venue', 'Status', 'Shares Collected', 'Welfare', 'Loans Issued', 'Fines', 'Members Present', 'Total Cash'];
         const csvContent = [
@@ -366,6 +481,51 @@ export default function Index() {
         a.click();
         window.URL.revokeObjectURL(url);
     };
+
+    const exportCollectionToCSV = () => {
+        if (!collectionSheet.data.length || !collectionSheet.meeting) return;
+
+        const headers = ['No.', 'Name', 'Welfare', 'Share', 'Loan Paid', 'Loan Taken', 'Interest', 'Rolled Over', 'Fines', 'Cumulative Shares', 'New Loan'];
+        const csvContent = [
+            headers.join(','),
+            ...collectionSheet.data.map((row, index) => [
+                index + 1,
+                `"${row.member.name}"`,
+                row.welfare || 0,
+                row.share || 0,
+                row.loan_paid || 0,
+                row.loan_taken || 0,
+                row.interest || 0,
+                row.rolled_over || 0,
+                row.fines || 0,
+                row.cumulative_shares || 0,
+                row.new_loan || 0
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `collection_sheet_${collectionSheet.meeting.meeting_date}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    };
+
+    // Calculate totals for collection sheet
+    const collectionTotals = React.useMemo(() => {
+        if (!collectionSheet.data.length) return null;
+
+        return {
+            welfare: collectionSheet.data.reduce((sum, row) => sum + (row.welfare || 0), 0),
+            share: collectionSheet.data.reduce((sum, row) => sum + (row.share || 0), 0),
+            loanPaid: collectionSheet.data.reduce((sum, row) => sum + (row.loan_paid || 0), 0),
+            loanTaken: collectionSheet.data.reduce((sum, row) => sum + (row.loan_taken || 0), 0),
+            interest: collectionSheet.data.reduce((sum, row) => sum + (row.interest || 0), 0),
+            rolledOver: collectionSheet.data.reduce((sum, row) => sum + (row.rolled_over || 0), 0),
+            fines: collectionSheet.data.reduce((sum, row) => sum + (row.fines || 0), 0),
+        };
+    }, [collectionSheet.data]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -637,7 +797,7 @@ export default function Index() {
                                         </Button>
                                         <Button
                                             size="sm"
-                                            onClick={() => router.get(`/meetings/${meeting.id}/collection-sheet`)}
+                                            onClick={() => openCollectionSheet(meeting)}
                                             className="gap-2"
                                         >
                                             <FileSpreadsheet className="h-4 w-4" />
@@ -955,6 +1115,211 @@ export default function Index() {
                     </DrawerFooter>
                 </DrawerContent>
             </Drawer>
+
+            {/* Collection Sheet Full-Screen Drawer */}
+            {collectionSheet.isOpen && (
+                <div className="fixed inset-0 z-50 bg-white overflow-hidden flex flex-col">
+                    {/* Header */}
+                    <div className="border-b bg-white shadow-sm print:shadow-none">
+                        <div className="p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={closeCollectionSheet}
+                                    className="print:hidden"
+                                >
+                                    <X className="h-5 w-5" />
+                                </Button>
+                                <div>
+                                    <h2 className="text-xl font-bold flex items-center gap-2">
+                                        <FileSpreadsheet className="h-6 w-6" />
+                                        Collection Sheet
+                                    </h2>
+                                    {collectionSheet.meeting && (
+                                        <p className="text-sm text-muted-foreground">
+                                            {new Date(collectionSheet.meeting.meeting_date + 'T00:00:00').toLocaleDateString('en-US', {
+                                                weekday: 'long',
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            })} - {collectionSheet.meeting.venue || 'No venue'}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 print:hidden">
+                                <Button
+                                    variant="outline"
+                                    onClick={exportCollectionToCSV}
+                                    className="gap-2"
+                                    disabled={!collectionSheet.data.length}
+                                >
+                                    <Download className="h-4 w-4" />
+                                    Export CSV
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={printCollectionSheet}
+                                    className="gap-2"
+                                >
+                                    <Printer className="h-4 w-4" />
+                                    Print
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-auto p-6">
+                        {collectionSheet.isLoading ? (
+                            <div className="flex items-center justify-center h-full">
+                                <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : collectionSheet.data.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-center">
+                                <AlertCircle className="h-16 w-16 text-muted-foreground mb-4" />
+                                <h3 className="text-lg font-semibold mb-2">No collection data available</h3>
+                                <p className="text-muted-foreground">
+                                    There are no transactions recorded for this meeting.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {/* Meeting Header Info */}
+                                <div className="bg-gray-50 p-4 rounded-lg border">
+                                    <h3 className="font-bold text-lg mb-2 uppercase">TELE WOMEN INVESTMENT GROUP</h3>
+                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                        <div><span className="font-semibold">DATE:</span> {collectionSheet.meeting?.meeting_date}</div>
+                                        <div><span className="font-semibold">VENUE:</span> {collectionSheet.meeting?.venue || 'N/A'}</div>
+                                    </div>
+                                </div>
+
+                                {/* Collection Table */}
+                                <div className="border rounded-lg overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">No.</th>
+                                                    <th className="border border-gray-300 px-3 py-2 text-left text-xs font-bold">NAME</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">WELFARE</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">SHARE</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">LOAN PAID</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">LOAN TAKEN</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">INTEREST</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">ROLLED OVER</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">FINES</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">CUMULATIVE SHARES</th>
+                                                    <th className="border border-gray-300 px-2 py-2 text-center text-xs font-bold">NEW LOAN</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {collectionSheet.data.map((row, index) => (
+                                                    <tr key={index} className="hover:bg-gray-50">
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">{index + 1}</td>
+                                                        <td className="border border-gray-300 px-3 py-1.5 text-sm font-medium">{row.member.name}</td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.welfare > 0 ? formatCurrency(row.welfare) : '—'}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.share > 0 ? formatCurrency(row.share) : '—'}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.loan_paid > 0 ? formatCurrency(row.loan_paid) : '—'}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.loan_taken > 0 ? formatCurrency(row.loan_taken) : '—'}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.interest > 0 ? formatCurrency(row.interest) : '—'}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.rolled_over > 0 ? formatCurrency(row.rolled_over) : '—'}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.fines > 0 ? formatCurrency(row.fines) : '—'}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm font-semibold">
+                                                            {formatCurrency(row.cumulative_shares)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-1.5 text-center text-sm">
+                                                            {row.new_loan > 0 ? formatCurrency(row.new_loan) : '—'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {/* Totals Row */}
+                                                {collectionTotals && (
+                                                    <tr className="bg-gray-100 font-bold border-t-2 border-gray-400">
+                                                        <td colSpan={2} className="border border-gray-300 px-3 py-2 text-sm">TOTALS</td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                                                            {formatCurrency(collectionTotals.welfare)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                                                            {formatCurrency(collectionTotals.share)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                                                            {formatCurrency(collectionTotals.loanPaid)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                                                            {formatCurrency(collectionTotals.loanTaken)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                                                            {formatCurrency(collectionTotals.interest)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                                                            {formatCurrency(collectionTotals.rolledOver)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                                                            {formatCurrency(collectionTotals.fines)}
+                                                        </td>
+                                                        <td className="border border-gray-300 px-2 py-2 text-center text-sm" colSpan={2}></td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* Summary Section */}
+                                {collectionSheet.meeting && collectionTotals && (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                                        <div className="border rounded-lg p-3 bg-gray-50">
+                                            <div className="text-xs text-muted-foreground font-semibold mb-1">BANK</div>
+                                            <div className="text-lg font-bold">
+                                                {formatCurrency(collectionSheet.meeting.bank_balance)}
+                                            </div>
+                                        </div>
+                                        <div className="border rounded-lg p-3 bg-gray-50">
+                                            <div className="text-xs text-muted-foreground font-semibold mb-1">CASH</div>
+                                            <div className="text-lg font-bold">
+                                                {formatCurrency(collectionSheet.meeting.cash_in_hand)}
+                                            </div>
+                                        </div>
+                                        <div className="border rounded-lg p-3 bg-gray-50">
+                                            <div className="text-xs text-muted-foreground font-semibold mb-1">LOAN</div>
+                                            <div className="text-lg font-bold">
+                                                {formatCurrency(collectionTotals.loanTaken)}
+                                            </div>
+                                        </div>
+                                        <div className="border rounded-lg p-3 bg-gray-50">
+                                            <div className="text-xs text-muted-foreground font-semibold mb-1">TOTAL COLLECTED</div>
+                                            <div className="text-lg font-bold text-green-600">
+                                                {formatCurrency(
+                                                    collectionTotals.welfare +
+                                                    collectionTotals.share +
+                                                    collectionTotals.loanPaid +
+                                                    collectionTotals.fines
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </AppLayout>
     );
 }

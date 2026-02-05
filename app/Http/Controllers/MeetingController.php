@@ -6,8 +6,13 @@ use App\Models\Meeting;
 use App\Models\Member;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Models\Share;
+use App\Models\Welfare;
+use App\Models\Loan;
+use App\Models\LoanPayment;
 use Inertia\Response;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Schema;
 
 class MeetingController extends Controller
 {
@@ -180,70 +185,172 @@ class MeetingController extends Controller
         ]);
     }
 
-    public function collectionSheet(Meeting $meeting): Response
+    /**
+     * Display the collection sheet for a specific meeting
+     */
+ public function collectionSheet(Meeting $meeting, Request $request)
     {
-        // Calculate meeting totals first
-        $meeting->calculateTotals();
+        $collectionSheetData = $this->getCollectionData($meeting)->getData(true);
         
-        // Get all active members with their transactions for this meeting
-        $members = Member::where('status', 'active')
-            ->with([
-                'shares' => function ($query) use ($meeting) {
-                    $query->where('meeting_id', $meeting->id);
-                },
-                'loans' => function ($query) use ($meeting) {
-                    $query->where('meeting_id', $meeting->id);
-                },
-                'welfare' => function ($query) use ($meeting) {
-                    $query->where('meeting_id', $meeting->id);
-                }
-            ])
-            ->orderBy('name')
-            ->get()
-            ->map(function ($member) {
-                // Calculate shares for this meeting
-                $sharesAmount = $member->shares->sum('amount') ?? 0;
-                
-                // Calculate welfare for this meeting
-                $welfareAmount = $member->welfare->sum('amount') ?? 0;
-                
-                // Calculate loans for this meeting
-                $loansTaken = $member->loans->sum('loan_amount') ?? 0;
-                $loansPaid = $member->loans->sum('amount_paid') ?? 0;
-                $interestAmount = $member->loans->sum('interest_amount') ?? 0;
-                $loanBalance = $member->loans->sum('balance') ?? 0;
+        // If this is an AJAX request for the drawer, return JSON
+        if ($request->expectsJson() || $request->header('X-Inertia-Partial-Data') === 'collectionSheetData') {
+            return response()->json($collectionSheetData);
+        }
+        
+        // For regular Inertia requests, return to index with the data
+        return Inertia::render('Meetings/Index', [
+            'meetings' => $this->getMeetingsList($request),
+            'filters' => $request->only(['search', 'status']),
+            'collectionData' => $collectionSheetData['collectionData'] ?? [],
+            'collectionSheetData' => $collectionSheetData,
+        ]);
+    }
+
+    /**
+     * Helper to get meetings list
+     */
+    private function getMeetingsList(Request $request)
+    {
+        $query = Meeting::query()
+            ->withCount(['shares', 'loans', 'welfare'])
+            ->withSum('shares', 'amount')
+            ->withSum('welfare', 'amount')
+            ->withSum('loans', 'loan_amount')
+            ->withSum('loans', 'interest_amount')
+            ->withSum(['welfare as fines_total' => function ($query) {
+                $query->where('type', 'fine');
+            }], 'amount');
+
+        // Apply filters
+        if ($request->has('search') && $request->search) {
+            $query->where(function ($q) use ($request) {
+                $q->where('venue', 'like', '%' . $request->search . '%')
+                  ->orWhere('agenda', 'like', '%' . $request->search . '%')
+                  ->orWhere('meeting_date', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        if ($request->has('status') && $request->status) {
+            $query->where('status', $request->status);
+        }
+
+        return $query->orderBy('meeting_date', 'desc')->get()
+            ->map(function ($meeting) {
+                $totalCash = ($meeting->bank_balance ?? 0) + ($meeting->cash_in_hand ?? 0);
+                $totalLoansIssued = ($meeting->loans_sum_loan_amount ?? 0) + ($meeting->loans_sum_interest_amount ?? 0);
                 
                 return [
-                    'id' => $member->id,
-                    'name' => $member->name,
-                    'member_number' => $member->member_number ?? '',
-                    'well_fare' => (float) $welfareAmount,
-                    'share' => (float) $sharesAmount,
-                    'cumulative_shares' => (float) ($member->total_shares ?? 0),
-                    'loan_paid' => (float) $loansPaid,
-                    'loan_taken' => (float) $loansTaken,
-                    'interest' => (float) $interestAmount,
-                    'balance' => (float) $loanBalance,
+                    'id' => $meeting->id,
+                    'meeting_date' => $meeting->meeting_date,
+                    'venue' => $meeting->venue,
+                    'start_time' => $meeting->start_time,
+                    'end_time' => $meeting->end_time,
+                    'total_shares_collected' => $meeting->shares_sum_amount ?? 0,
+                    'total_welfare_collected' => $meeting->welfare_sum_amount ?? 0,
+                    'total_loan_paid' => 0,
+                    'total_loans_issued' => $totalLoansIssued,
+                    'total_fines' => $meeting->fines_total ?? 0,
+                    'bank_balance' => $meeting->bank_balance,
+                    'cash_in_hand' => $meeting->cash_in_hand,
+                    'members_present' => $meeting->members_present,
+                    'agenda' => $meeting->agenda,
+                    'minutes' => $meeting->minutes,
+                    'status' => $meeting->status,
+                    'shares_count' => $meeting->shares_count,
+                    'loans_count' => $meeting->loans_count,
+                    'welfare_count' => $meeting->welfare_count,
+                    'total_cash' => $totalCash,
                 ];
             });
+    }
+    /**
+     * Alternative: JSON API endpoint for collection data
+     */
+    public function getCollectionData(Meeting $meeting)
+    {
+        $members = Member::orderBy('name')->get();
 
-        return Inertia::render('Meetings/CollectionSheet', [
-            'meeting' => [
-                'id' => $meeting->id,
-                'meeting_date' => $meeting->meeting_date,
-                'venue' => $meeting->venue ?? '',
-                'start_time' => $meeting->start_time,
-                'end_time' => $meeting->end_time,
-                'status' => $meeting->status ?? 'scheduled',
-            ],
-            'members' => $members,
-            'summary' => [
-                'total_shares' => (float) ($meeting->total_shares_collected ?? 0),
-                'total_welfare' => (float) ($meeting->total_welfare_collected ?? 0),
-                'total_loans' => (float) ($meeting->total_loans_issued ?? 0),
-                'total_loan_paid' => (float) ($meeting->total_loan_paid ?? 0),
-                'total_fines' => (float) ($meeting->total_fines ?? 0),
-                'total_cash' => (float) ($meeting->total_cash ?? 0),
+        $collectionData = $members->map(function ($member) use ($meeting) {
+            $welfareContribution = Welfare::where('meeting_id', $meeting->id)
+                ->where('member_id', $member->id)
+                ->where('type', 'contribution')
+                ->sum('amount') ?? 0;
+
+            $fines = Welfare::where('meeting_id', $meeting->id)
+                ->where('member_id', $member->id)
+                ->where('type', 'fine')
+                ->sum('amount') ?? 0;
+
+            $shareContribution = Share::where('meeting_id', $meeting->id)
+                ->where('member_id', $member->id)
+                ->sum('amount') ?? 0;
+
+            $cumulativeShares = Share::where('member_id', $member->id)
+                ->whereHas('meeting', function ($query) use ($meeting) {
+                    $query->where('meeting_date', '<=', $meeting->meeting_date);
+                })
+                ->sum('amount') ?? 0;
+
+            $loansTaken = Loan::where('meeting_id', $meeting->id)
+                ->where('member_id', $member->id)
+                ->whereIn('status', ['approved', 'active'])
+                ->get();
+
+            $loanAmount = $loansTaken->sum('loan_amount') ?? 0;
+            $interestAmount = $loansTaken->sum('interest_amount') ?? 0;
+
+            // Get loan payments
+            $loanPayments = 0;
+            
+            if (Schema::hasTable('loan_payments')) {
+                $loanPayments = LoanPayment::where('member_id', $member->id)
+                    ->where('meeting_id', $meeting->id)
+                    ->sum('amount') ?? 0;
+            } else {
+                $loanPayments = Loan::where('member_id', $member->id)
+                    ->where('meeting_id', $meeting->id)
+                    ->sum('amount_paid') ?? 0;
+            }
+
+            $rolledOverAmount = Loan::where('member_id', $member->id)
+                ->where('status', 'active')
+                ->whereDate('loan_date', '<', $meeting->meeting_date)
+                ->sum('balance') ?? 0;
+
+            $newLoanAmount = Loan::where('meeting_id', $meeting->id)
+                ->where('member_id', $member->id)
+                ->where('status', 'approved')
+                ->sum('total_amount') ?? 0;
+
+            return [
+                'member' => [
+                    'id' => $member->id,
+                    'name' => $member->name,
+                ],
+                'welfare' => (float) $welfareContribution,
+                'share' => (float) $shareContribution,
+                'loan_paid' => (float) $loanPayments,
+                'loan_taken' => (float) $loanAmount,
+                'interest' => (float) $interestAmount,
+                'rolled_over' => (float) $rolledOverAmount,
+                'fines' => (float) $fines,
+                'cumulative_shares' => (float) $cumulativeShares,
+                'new_loan' => (float) $newLoanAmount,
+            ];
+        });
+
+        return response()->json([
+            'meeting' => $meeting,
+            'collectionData' => $collectionData,
+            'totals' => [
+                'welfare' => $collectionData->sum('welfare'),
+                'share' => $collectionData->sum('share'),
+                'loan_paid' => $collectionData->sum('loan_paid'),
+                'loan_taken' => $collectionData->sum('loan_taken'),
+                'interest' => $collectionData->sum('interest'),
+                'rolled_over' => $collectionData->sum('rolled_over'),
+                'fines' => $collectionData->sum('fines'),
+                'new_loan' => $collectionData->sum('new_loan'),
             ]
         ]);
     }

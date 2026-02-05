@@ -42,7 +42,7 @@ class MemberController extends Controller
 
     public function create(): Response
     {
-       //eturn Inertia::render('Members/Create');
+       return Inertia::render('Members/Create');
     }
 
     public function store(Request $request): RedirectResponse

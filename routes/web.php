@@ -172,7 +172,11 @@ Route::resource('loans', LoanController::class);
         ->name('meetings.summary');
     
     Route::get('/meetings/{meeting}/collection-sheet', [MeetingController::class, 'collectionSheet'])
-        ->name('meetings.collection-sheet');
+    ->name('meetings.collection-sheet');
+
+// Option 2: If you want to keep 'collectionsheet', make sure it's defined
+Route::get('/meetings/{meeting}/collectionsheet', [MeetingController::class, 'collectionSheet'])
+    ->name('meetings.collectionsheet');
 
 });
 
